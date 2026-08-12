@@ -438,6 +438,7 @@ describe("AgentSession concurrent prompt guard", () => {
 			_extensionRunner?: {
 				hasHandlers: (eventType: string) => boolean;
 				emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
+				emitMessageStart: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
 				emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
 				emitToolCall: (event: { type: string; toolCallId: string }) => Promise<undefined>;
 				emitInput: (
@@ -458,6 +459,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		sessionWithRunner._extensionRunner = {
 			hasHandlers: (eventType) => eventType === "tool_call",
 			emit: async () => {},
+			emitMessageStart: async () => undefined,
 			emitMessageEnd: async () => undefined,
 			emitToolCall: async () => {
 				snapshots.push(
@@ -584,6 +586,7 @@ describe("AgentSession concurrent prompt guard", () => {
 			_extensionRunner?: {
 				hasHandlers: (eventType: string) => boolean;
 				emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
+				emitMessageStart: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
 				emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
 				emitInput: (
 					text: string,
@@ -603,6 +606,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		sessionWithRunner._extensionRunner = {
 			hasHandlers: () => false,
 			emit: async () => {},
+			emitMessageStart: async () => undefined,
 			emitMessageEnd: async (event) => {
 				if (event.type === "message_end" && event.message?.role === "assistant") {
 					await new Promise((resolve) => setTimeout(resolve, 40));

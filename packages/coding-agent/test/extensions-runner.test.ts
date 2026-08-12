@@ -6,6 +6,7 @@ import { createInMemoryModelRegistry } from "./model-runtime-test-utils.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createExtensionRuntime, discoverAndLoadExtensions, loadExtensions } from "../src/core/extensions/loader.ts";
@@ -1013,6 +1014,80 @@ describe("ExtensionRunner", () => {
 			expect(errors).toHaveLength(1);
 			expect(errors[0].event).toBe("before_provider_headers");
 			expect(errors[0].error).toContain("header handler boom");
+		});
+	});
+
+	describe("message display filtering", () => {
+		const assistantMessage = () =>
+			({
+				role: "assistant",
+				content: [{ type: "text", text: "draft" }],
+			}) as unknown as AgentMessage;
+
+		it("collects display: false from message_start handlers", async () => {
+			fs.writeFileSync(
+				path.join(extensionsDir, "hide.ts"),
+				`export default function(pi) {
+	pi.on("message_start", (event) => (event.message.role === "assistant" ? { display: false } : undefined));
+}`,
+			);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+
+			const hidden = await runner.emitMessageStart({ type: "message_start", message: assistantMessage() });
+			expect(hidden).toEqual({ display: false });
+
+			const shown = await runner.emitMessageStart({
+				type: "message_start",
+				message: { role: "user", content: [] } as unknown as AgentMessage,
+			});
+			expect(shown).toBeUndefined();
+		});
+
+		it("returns displayContent from message_end handlers without replacing the message", async () => {
+			fs.writeFileSync(
+				path.join(extensionsDir, "display.ts"),
+				`export default function(pi) {
+	pi.on("message_end", () => ({ displayContent: "notice" }));
+}`,
+			);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+
+			const endResult = await runner.emitMessageEnd({ type: "message_end", message: assistantMessage() });
+			expect(endResult).toEqual({ displayContent: "notice" });
+		});
+
+		it("returns message replacement and displayContent together", async () => {
+			fs.writeFileSync(
+				path.join(extensionsDir, "both.ts"),
+				`export default function(pi) {
+	pi.on("message_end", (event) => ({
+		message: { ...event.message, content: [{ type: "text", text: "replaced" }] },
+		displayContent: "",
+	}));
+}`,
+			);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+
+			const endResult = await runner.emitMessageEnd({ type: "message_end", message: assistantMessage() });
+			expect(endResult?.displayContent).toBe("");
+			expect(endResult?.message?.content).toEqual([{ type: "text", text: "replaced" }]);
+		});
+
+		it("returns undefined when message_end handlers change nothing", async () => {
+			fs.writeFileSync(
+				path.join(extensionsDir, "noop.ts"),
+				`export default function(pi) {
+	pi.on("message_end", () => undefined);
+}`,
+			);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+
+			const endResult = await runner.emitMessageEnd({ type: "message_end", message: assistantMessage() });
+			expect(endResult).toBeUndefined();
 		});
 	});
 });

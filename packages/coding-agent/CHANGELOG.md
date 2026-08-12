@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added display-filter hooks for extensions: `message_start` handlers can return `{ display: false }` to withhold an assistant message's streaming display in interactive mode, and `message_end` handlers can return `{ displayContent }` to render replacement text, nothing (empty string), or the message unchanged (undefined, also on abort or error). Context, persistence, and non-interactive modes are unaffected. See [Extension Events](docs/extensions.md#message_start--message_update--message_end).
+
 ## [0.84.1] - 2026-08-07
 
 ### New Features

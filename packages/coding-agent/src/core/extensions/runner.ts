@@ -43,6 +43,8 @@ import type {
 	MessageEndEvent,
 	MessageEndEventResult,
 	MessageRenderer,
+	MessageStartEvent,
+	MessageStartEventResult,
 	ProjectTrustContext,
 	ProjectTrustEvent,
 	ProjectTrustEventResult,
@@ -832,10 +834,41 @@ export class ExtensionRunner {
 		return result as RunnerEmitResult<TEvent>;
 	}
 
-	async emitMessageEnd(event: MessageEndEvent): Promise<AgentMessage | undefined> {
+	async emitMessageStart(event: MessageStartEvent): Promise<MessageStartEventResult | undefined> {
+		const ctx = this.createContext();
+		let result: MessageStartEventResult | undefined;
+
+		for (const ext of this.extensions) {
+			const handlers = ext.handlers.get("message_start");
+			if (!handlers || handlers.length === 0) continue;
+
+			for (const handler of handlers) {
+				try {
+					const handlerResult = (await handler(event, ctx)) as MessageStartEventResult | undefined;
+					if (handlerResult?.display === false) {
+						result = { display: false };
+					}
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					const stack = err instanceof Error ? err.stack : undefined;
+					this.emitError({
+						extensionPath: ext.path,
+						event: "message_start",
+						error: message,
+						stack,
+					});
+				}
+			}
+		}
+
+		return result;
+	}
+
+	async emitMessageEnd(event: MessageEndEvent): Promise<MessageEndEventResult | undefined> {
 		const ctx = this.createContext();
 		let currentMessage = event.message;
 		let modified = false;
+		let displayContent: string | undefined;
 
 		for (const ext of this.extensions) {
 			const handlers = ext.handlers.get("message_end");
@@ -845,6 +878,9 @@ export class ExtensionRunner {
 				try {
 					const currentEvent: MessageEndEvent = { ...event, message: currentMessage };
 					const handlerResult = (await handler(currentEvent, ctx)) as MessageEndEventResult | undefined;
+					if (handlerResult?.displayContent !== undefined) {
+						displayContent = handlerResult.displayContent;
+					}
 					if (!handlerResult?.message) continue;
 
 					if (handlerResult.message.role !== currentMessage.role) {
@@ -871,7 +907,11 @@ export class ExtensionRunner {
 			}
 		}
 
-		return modified ? currentMessage : undefined;
+		if (!modified && displayContent === undefined) return undefined;
+		return {
+			...(modified ? { message: currentMessage } : {}),
+			...(displayContent !== undefined ? { displayContent } : {}),
+		};
 	}
 
 	async emitToolResult(event: ToolResultEvent): Promise<ToolResultEventResult | undefined> {

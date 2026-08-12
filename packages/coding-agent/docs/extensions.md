@@ -591,7 +591,9 @@ Fired for message lifecycle updates.
 
 - `message_start` and `message_end` fire for user, assistant, and toolResult messages.
 - `message_update` fires for assistant streaming updates.
+- `message_start` handlers can return `{ display: false }` for an assistant message to withhold its streaming display in interactive mode. A dim placeholder shows while the message generates. Context, persistence, and other modes are unaffected.
 - `message_end` handlers can return `{ message }` to replace the finalized message. The replacement must keep the same `role`.
+- `message_end` handlers can return `{ displayContent }` to control what interactive mode renders for a withheld message: a string renders instead of the message content, an empty string renders nothing, and no `displayContent` renders the message unchanged (also on abort or error, so filters fail open). The message itself stays intact in context and session history, and remains visible in the expanded transcript.
 
 ```typescript
 pi.on("message_start", async (event, ctx) => {
@@ -618,6 +620,22 @@ pi.on("message_end", async (event, ctx) => {
       },
     },
   };
+});
+```
+
+Display filtering example: withhold every assistant draft, then decide at the end what the reader sees.
+
+```typescript
+pi.on("message_start", async (event) => {
+  if (event.message.role !== "assistant") return;
+  return { display: false };
+});
+
+pi.on("message_end", async (event) => {
+  if (event.message.role !== "assistant") return;
+  const text = textContent(event.message);
+  if (passesPolicy(text)) return; // no displayContent: display unchanged
+  return { displayContent: "Draft withheld by policy; see the transcript." };
 });
 ```
 

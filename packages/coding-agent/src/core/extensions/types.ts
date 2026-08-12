@@ -1094,9 +1094,24 @@ export interface ToolResultEventResult {
 	usage?: Usage;
 }
 
+export interface MessageStartEventResult {
+	/**
+	 * When false for an assistant message, interactive mode withholds the streaming
+	 * display of this message. The final rendering is decided at message_end via
+	 * MessageEndEventResult.displayContent. Context and persistence are unaffected.
+	 */
+	display?: boolean;
+}
+
 export interface MessageEndEventResult {
 	/** Replace the finalized message. The replacement must keep the original message role. */
 	message?: AgentMessage;
+	/**
+	 * Display-only replacement text for interactive mode. Does not change the
+	 * message in context or session history. An empty string displays nothing.
+	 * Undefined displays the message unchanged.
+	 */
+	displayContent?: string;
 }
 
 export interface BeforeAgentStartEventResult {
@@ -1230,7 +1245,7 @@ export interface ExtensionAPI {
 	on(event: "agent_settled", handler: ExtensionHandler<AgentSettledEvent>): void;
 	on(event: "turn_start", handler: ExtensionHandler<TurnStartEvent>): void;
 	on(event: "turn_end", handler: ExtensionHandler<TurnEndEvent>): void;
-	on(event: "message_start", handler: ExtensionHandler<MessageStartEvent>): void;
+	on(event: "message_start", handler: ExtensionHandler<MessageStartEvent, MessageStartEventResult>): void;
 	on(event: "message_update", handler: ExtensionHandler<MessageUpdateEvent>): void;
 	on(event: "message_end", handler: ExtensionHandler<MessageEndEvent, MessageEndEventResult>): void;
 	on(event: "tool_execution_start", handler: ExtensionHandler<ToolExecutionStartEvent>): void;

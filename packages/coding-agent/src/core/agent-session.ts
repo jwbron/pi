@@ -751,7 +751,11 @@ export class AgentSession {
 				type: "message_start",
 				message: event.message,
 			};
-			await this._extensionRunner.emit(extensionEvent);
+			const startResult = await this._extensionRunner.emitMessageStart(extensionEvent);
+			if (startResult?.display === false) {
+				// Display-only hint consumed by interactive mode; context is unaffected.
+				(event as { display?: boolean }).display = false;
+			}
 		} else if (event.type === "message_update") {
 			const extensionEvent: MessageUpdateEvent = {
 				type: "message_update",
@@ -764,7 +768,12 @@ export class AgentSession {
 				type: "message_end",
 				message: event.message,
 			};
-			const replacement = await this._extensionRunner.emitMessageEnd(extensionEvent);
+			const endResult = await this._extensionRunner.emitMessageEnd(extensionEvent);
+			if (endResult?.displayContent !== undefined) {
+				// Display-only replacement consumed by interactive mode; context is unaffected.
+				(event as { displayContent?: string }).displayContent = endResult.displayContent;
+			}
+			const replacement = endResult?.message;
 			if (replacement) {
 				// Untyped extension handlers can return messages with null/missing content;
 				// normalize so it never enters agent state or session history.

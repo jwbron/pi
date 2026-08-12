@@ -434,6 +434,9 @@ export class InteractiveMode {
 	// Streaming message tracking
 	private streamingComponent: AssistantMessageComponent | undefined = undefined;
 	private streamingMessage: AssistantMessage | undefined = undefined;
+	/** True when an extension withheld the streaming display of the current assistant message. */
+	private streamingHidden = false;
+	private streamingPlaceholder: Text | undefined = undefined;
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
@@ -3136,7 +3139,13 @@ export class InteractiveMode {
 						this.getMarkdownTransformers(),
 					);
 					this.streamingMessage = event.message;
-					this.chatContainer.addChild(this.streamingComponent);
+					this.streamingHidden = (event as { display?: boolean }).display === false;
+					if (this.streamingHidden) {
+						this.streamingPlaceholder = new Text(theme.fg("dim", "· composing…"), this.outputPad, 0);
+						this.chatContainer.addChild(this.streamingPlaceholder);
+					} else {
+						this.chatContainer.addChild(this.streamingComponent);
+					}
 					this.streamingComponent.updateContent(this.streamingMessage, true);
 					this.ui.requestRender();
 				}
@@ -3210,6 +3219,27 @@ export class InteractiveMode {
 						}
 						this.maybeShowCacheMissNotice(this.streamingMessage);
 					}
+					if (this.streamingHidden) {
+						if (this.streamingPlaceholder) {
+							this.chatContainer.removeChild(this.streamingPlaceholder);
+							this.streamingPlaceholder = undefined;
+						}
+						const displayContent = (event as { displayContent?: string }).displayContent;
+						const failed =
+							this.streamingMessage.stopReason === "aborted" || this.streamingMessage.stopReason === "error";
+						// Fail open: without a display decision (or on failure) show the message unchanged.
+						if (failed || displayContent === undefined) {
+							this.chatContainer.addChild(this.streamingComponent);
+						} else if (displayContent !== "") {
+							const displayMessage: AssistantMessage = {
+								...this.streamingMessage,
+								content: [{ type: "text", text: displayContent }],
+							};
+							this.streamingComponent.updateContent(displayMessage, false);
+							this.chatContainer.addChild(this.streamingComponent);
+						}
+						this.streamingHidden = false;
+					}
 					this.streamingComponent = undefined;
 					this.streamingMessage = undefined;
 					this.footer.invalidate();
@@ -3274,6 +3304,11 @@ export class InteractiveMode {
 					this.streamingComponent = undefined;
 					this.streamingMessage = undefined;
 				}
+				if (this.streamingPlaceholder) {
+					this.chatContainer.removeChild(this.streamingPlaceholder);
+					this.streamingPlaceholder = undefined;
+				}
+				this.streamingHidden = false;
 				this.pendingTools.clear();
 
 				this.ui.requestRender();
